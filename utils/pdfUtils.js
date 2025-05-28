@@ -27,19 +27,26 @@ async function splitPdfByPages(pdfPath) {
 }
 
 async function mergePdfsFromUrls(urls) {
+  // dynamic import pdf-merger-js ESM module အတွက်
+  const { default: PDFMerger } = await import("pdf-merger-js");
   const merger = new PDFMerger();
+
+  // temporary files ကို သိမ်းထားမယ်
   merger._tempFiles = [];
 
   for (const url of urls) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
+
       const buffer = await res.buffer();
 
+      // temporary pdf file သိမ်းမယ်
       const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
       await fs.promises.writeFile(tempPath, buffer);
 
       await merger.add(tempPath);
+
       merger._tempFiles.push(tempPath);
     } catch (err) {
       console.error(`❌ Error processing ${url}:`, err.message);
@@ -49,8 +56,15 @@ async function mergePdfsFromUrls(urls) {
   const outputPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
   await merger.save(outputPath);
 
-  for (const file of merger._tempFiles) {
-    fs.unlinkSync(file);
+  // temporary files ဖျက်ပစ်မယ်
+  if (merger._tempFiles) {
+    for (const file of merger._tempFiles) {
+      try {
+        await fs.promises.unlink(file);
+      } catch (e) {
+        console.warn(`⚠️ Failed to delete temp file ${file}:`, e.message);
+      }
+    }
   }
 
   return outputPath;
