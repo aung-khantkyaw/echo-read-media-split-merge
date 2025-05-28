@@ -2,7 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const { PDFDocument } = require("pdf-lib");
 const { v4: uuidv4 } = require("uuid");
-const fetch = require("node-fetch");
 
 async function splitPdfByPages(pdfPath) {
   const data = await fs.promises.readFile(pdfPath);
