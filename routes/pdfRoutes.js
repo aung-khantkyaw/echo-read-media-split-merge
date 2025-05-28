@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const fs = require('fs');
+const fs = require("fs");
 const {
   splitPdfByPageCountAndUpload,
   mergePdfsFromUrls,
@@ -11,7 +11,11 @@ const upload = multer({ dest: "uploads/" });
 
 router.post("/split", upload.single("pdf"), async (req, res) => {
   try {
-    const uploadedUrls = await splitPdfByPageCountAndUpload(req.file.path, 10); // every 5 pages per chunk
+    const pagesPerChunk = parseInt(req.body.pages_per_chunk) || 10;
+    const uploadedUrls = await splitPdfByPageCountAndUpload(
+      req.file.path,
+      pagesPerChunk
+    ); // every 5 pages per chunk
     res.json({ files: uploadedUrls });
   } catch (err) {
     console.error("PDF split & upload error:", err);
