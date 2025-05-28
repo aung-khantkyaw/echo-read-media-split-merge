@@ -74,25 +74,33 @@ function splitWithFFmpeg(inputPath, duration) {
   });
 }
 
-// Upload chunks to Cloudinary and return array of URLs
 async function splitAudioByDuration(inputPath, duration) {
   const chunks = await splitWithFFmpeg(inputPath, duration);
+  console.log("🧩 Total chunks to upload:", chunks.length);
+
   const urls = [];
 
   for (const chunkPath of chunks) {
+    console.log("📤 Uploading chunk:", chunkPath);
     try {
       const result = await cloudinary.uploader.upload(chunkPath, {
-        resource_type: "auto", // auto သုံးထားတာမှန်ပါတယ်
+        resource_type: "video",
         folder: "book_audio",
+        public_id: path.basename(chunkPath, path.extname(chunkPath)),
+        use_filename: true,
+        overwrite: true,
       });
+      console.log("✅ Uploaded:", result.secure_url);
       urls.push(result.secure_url);
     } catch (err) {
-      console.error(`Failed to upload ${chunkPath}:`, err.message);
+      console.error(`❌ Failed to upload ${chunkPath}:`, err.message);
+      throw new Error(`Cloudinary upload failed for ${chunkPath}`);
     } finally {
       try {
         await fsPromises.unlink(chunkPath);
+        console.log("🗑️ Deleted temp file:", chunkPath);
       } catch (e) {
-        console.warn(`Failed to delete chunk ${chunkPath}:`, e.message);
+        console.warn(`⚠️ Failed to delete chunk ${chunkPath}:`, e.message);
       }
     }
   }
