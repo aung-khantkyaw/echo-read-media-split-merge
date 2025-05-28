@@ -19,8 +19,8 @@ function splitWithFFmpeg(inputPath, duration, originalName) {
       const resolvedInputPath = path.resolve(inputPath);
       const outputDir = path.dirname(resolvedInputPath);
 
-      const baseName = path.basename(originalName, path.extname(originalName));
-      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
+      // const baseName = path.basename(originalName, path.extname(originalName));
+      const outputPattern = path.join(outputDir, `${originalName}_%03d.mp3`);
 
       console.log("Splitting audio using FFmpeg...");
       console.log("Input path:", resolvedInputPath);
@@ -55,7 +55,7 @@ function splitWithFFmpeg(inputPath, duration, originalName) {
           try {
             const files = await fsPromises.readdir(outputDir);
             const chunkPaths = files
-              .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
+              .filter((f) => f.startsWith(originalName + "_") && f.endsWith(".mp3"))
               .map((f) => path.join(outputDir, f));
             console.log("Split complete. Files:", chunkPaths);
             resolve(chunkPaths);
