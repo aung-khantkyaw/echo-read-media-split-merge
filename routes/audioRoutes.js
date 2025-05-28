@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { splitWithFFmpeg } = require("../utils/audioUtils");
+const { splitAudioByDuration } = require("../utils/audioUtils");
 const { v2: cloudinary } = require("cloudinary");
 const fs = require("fs/promises");
 const path = require("path");
