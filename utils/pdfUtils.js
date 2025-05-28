@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { PDFDocument } = require("pdf-lib");
 const { v4: uuidv4 } = require("uuid");
+const fetch = require("node-fetch");
 
 async function splitPdfByPages(pdfPath) {
   const data = await fs.promises.readFile(pdfPath);
@@ -25,18 +26,20 @@ async function splitPdfByPages(pdfPath) {
   return outputFiles;
 }
 
-async function mergePdfs(paths) {
+async function mergePdfsFromUrls(urls) {
   const mergedPdf = await PDFDocument.create();
 
-  for (const p of paths) {
+  for (const url of urls) {
     try {
-      const bytes = await fs.promises.readFile(p);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed to fetch: ${res.statusText}`);
+      const bytes = await res.arrayBuffer();
       const doc = await PDFDocument.load(bytes);
       const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
       pages.forEach((page) => mergedPdf.addPage(page));
     } catch (err) {
-      console.error(`Error reading or merging file ${p}:`, err.message);
-      // skip this file and continue
+      console.error(`❌ Error reading or merging file ${url}:`, err.message);
+      // Skip file
     }
   }
 
@@ -46,4 +49,4 @@ async function mergePdfs(paths) {
   return mergedPath;
 }
 
-module.exports = { splitPdfByPages, mergePdfs };
+module.exports = { splitPdfByPages, mergePdfsFromUrls };
