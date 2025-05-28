@@ -1,16 +1,24 @@
 const express = require("express");
 const multer = require("multer");
-const { splitPdfByPages, mergePdfsFromUrls } = require("../utils/pdfUtils");
+const { splitPdfByPagesAndUpload, mergePdfsFromUrls } = require("../utils/pdfUtils");
 const router = express.Router();
 
 const upload = multer({ dest: "uploads/" });
 
 router.post("/split", upload.single("pdf"), async (req, res) => {
   try {
-    const files = await splitPdfByPages(req.file.path);
-    res.json({ message: "PDF split successful", files });
+    const uploadedUrls = await splitPdfByPagesAndUpload(req.file.path);
+    res.json({ files: uploadedUrls });
   } catch (err) {
+    console.error("PDF split & upload error:", err);
     res.status(500).json({ error: err.message });
+  } finally {
+    // Delete uploaded original file
+    try {
+      if (req.file?.path) await fs.unlink(req.file.path);
+    } catch (e) {
+      console.warn("Failed to delete original PDF upload:", e);
+    }
   }
 });
 

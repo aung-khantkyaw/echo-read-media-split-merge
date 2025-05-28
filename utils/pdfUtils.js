@@ -1,27 +1,61 @@
-const fs = require("fs");
+const fs = require("fs/promises");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const { PDFDocument } = require("pdf-lib");
+const { v2: cloudinary } = require("cloudinary");
 
-async function splitPdfByPages(pdfPath) {
-  const data = await fs.promises.readFile(pdfPath);
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+async function splitPdfByPagesAndUpload(pdfPath) {
+  const data = await fs.readFile(pdfPath);
   const pdfDoc = await PDFDocument.load(data);
   const totalPages = pdfDoc.getPageCount();
-  const outputFiles = [];
+
+  const uploadedUrls = [];
 
   for (let i = 0; i < totalPages; i++) {
     const newPdf = await PDFDocument.create();
     const [page] = await newPdf.copyPages(pdfDoc, [i]);
     newPdf.addPage(page);
 
-    const newPdfBytes = await newPdf.save();
+    const pdfBytes = await newPdf.save();
     const fileName = `split_${uuidv4()}.pdf`;
-    const filePath = path.join("uploads", fileName);
-    await fs.promises.writeFile(filePath, newPdfBytes);
-    outputFiles.push(filePath);
+    const tempFilePath = path.join("uploads", fileName);
+    await fs.writeFile(tempFilePath, pdfBytes);
+
+    // Cloudinary upload (resource_type: raw for PDF)
+    try {
+      const result = await cloudinary.uploader.upload(tempFilePath, {
+        resource_type: "raw",
+        folder: "echo-read/ebooks",
+        public_id: path.parse(fileName).name,
+        use_filename: true,
+        overwrite: true,
+      });
+      console.log("✅ Uploaded:", result.secure_url);
+
+      const match = result.secure_url.match(/\/book_audio\/.+$/);
+
+      if (match) {
+        const relativePath = match[0].substring(1);
+        uploadedUrls.push(relativePath);
+      } else {
+        uploadedUrls.push(result.secure_url);
+      }
+    } catch (err) {
+      console.error(`Failed to upload PDF chunk ${fileName}:`, err);
+      throw new Error("Cloudinary upload failed");
+    } finally {
+      // Temp file cleanup
+      await fs.unlink(tempFilePath);
+    }
   }
 
-  return outputFiles;
+  return uploadedUrls; // Cloudinary URLs array
 }
 
 async function mergePdfsFromUrls(urls) {
@@ -71,4 +105,4 @@ async function mergePdfsFromUrls(urls) {
   }
 }
 
-module.exports = { splitPdfByPages, mergePdfsFromUrls };
+module.exports = { splitPdfByPagesAndUpload, mergePdfsFromUrls };
