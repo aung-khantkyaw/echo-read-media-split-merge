@@ -2,7 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const { PDFDocument } = require("pdf-lib");
-const PDFMerger = require("pdf-merger-js");
 const fetch = require("node-fetch");
 
 async function splitPdfByPages(pdfPath) {
