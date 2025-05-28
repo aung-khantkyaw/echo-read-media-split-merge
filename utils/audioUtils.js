@@ -12,29 +12,62 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Split the audio file using ffmpeg by duration in seconds
+// Function to split audio file into chunks using FFmpeg
 function splitWithFFmpeg(inputPath, duration) {
   return new Promise((resolve, reject) => {
-    const outputDir = path.dirname(inputPath);
-    const baseName = path.basename(inputPath, path.extname(inputPath));
-    const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
+    try {
+      const resolvedInputPath = path.resolve(inputPath);
+      const outputDir = path.dirname(resolvedInputPath);
+      const baseName = path.basename(
+        resolvedInputPath,
+        path.extname(resolvedInputPath)
+      );
+      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
 
-    ffmpeg(inputPath)
-      .outputOptions(["-f segment", `-segment_time ${duration}`, "-c copy"])
-      .output(outputPattern)
-      .on("end", async () => {
-        try {
-          const files = await fsPromises.readdir(outputDir);
-          const chunkPaths = files
-            .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
-            .map((f) => path.join(outputDir, f));
-          resolve(chunkPaths);
-        } catch (err) {
-          reject(err);
-        }
-      })
-      .on("error", reject)
-      .run();
+      console.log("Splitting audio using FFmpeg...");
+      console.log("Input path:", resolvedInputPath);
+      console.log("Output pattern:", outputPattern);
+      console.log("Segment duration (sec):", duration);
+
+      ffmpeg(resolvedInputPath)
+        .outputOptions([
+          "-f",
+          "segment",
+          "-segment_time",
+          duration.toString(),
+          "-c",
+          "copy",
+        ])
+        .output(outputPattern)
+        .on("start", (cmdLine) => {
+          console.log("FFmpeg command:", cmdLine);
+        })
+        .on("stderr", (stderrLine) => {
+          console.error("FFmpeg STDERR:", stderrLine);
+        })
+        .on("error", (err, stdout, stderr) => {
+          console.error("FFmpeg ERROR:", err.message);
+          console.error("FFmpeg STDERR:", stderr);
+          reject(new Error(`FFmpeg failed: ${err.message}`));
+        })
+        .on("end", async () => {
+          try {
+            const files = await fsPromises.readdir(outputDir);
+            const chunkPaths = files
+              .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
+              .map((f) => path.join(outputDir, f));
+            console.log("Split complete. Files:", chunkPaths);
+            resolve(chunkPaths);
+          } catch (err) {
+            console.error("Failed to read output directory:", err);
+            reject(err);
+          }
+        })
+        .run();
+    } catch (err) {
+      console.error("Unexpected error in splitWithFFmpeg:", err);
+      reject(err);
+    }
   });
 }
 

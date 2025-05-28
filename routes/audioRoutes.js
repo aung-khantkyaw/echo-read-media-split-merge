@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { splitAudioByDuration } = require("../utils/audioUtils");
+const { splitWithFFmpeg } = require("../utils/audioUtils");
 const { v2: cloudinary } = require("cloudinary");
 const fs = require("fs/promises");
 const path = require("path");
@@ -17,11 +17,12 @@ cloudinary.config({
 
 router.post("/split", upload.single("audio"), async (req, res) => {
   try {
-    const duration = parseInt(req.body.duration || "600");
-    const files = await splitAudioByDuration(req.file.path, duration);
-    res.json({ message: "Audio split and uploaded", files });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const duration = parseInt(req.body.duration || "600", 10);
+    const chunks = await splitWithFFmpeg(req.file.path, duration);
+    res.status(200).json({ files: chunks });
+  } catch (error) {
+    console.error("Error in /api/audio/split:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
