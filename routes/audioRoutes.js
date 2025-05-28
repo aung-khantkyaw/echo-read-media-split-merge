@@ -21,7 +21,7 @@ router.post("/split", upload.single("audio"), async (req, res) => {
     const durationMinutes = parseInt(req.body.duration || "60", 10);
     const durationSeconds = durationMinutes * 60;
 
-    const chunks = await splitAudioByDuration(req.file.path, durationSeconds);
+    const chunks = await splitAudioByDuration(req.file.path, durationSeconds, req.file.originalname);
     res.status(200).json({ files: chunks });
   } catch (error) {
     console.error("❌ Error in /api/audio/split:", error);

@@ -13,16 +13,14 @@ cloudinary.config({
 });
 
 // Function to split audio file into chunks using FFmpeg
-function splitWithFFmpeg(inputPath, duration) {
+function splitWithFFmpeg(inputPath, duration, originalName) {
   return new Promise((resolve, reject) => {
     try {
       const resolvedInputPath = path.resolve(inputPath);
       const outputDir = path.dirname(resolvedInputPath);
-      const baseName = path.basename(
-        resolvedInputPath,
-        path.extname(resolvedInputPath)
-      );
-      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`); // 👉 file name with original name
+
+      const baseName = path.basename(originalName, path.extname(originalName));
+      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
 
       console.log("Splitting audio using FFmpeg...");
       console.log("Input path:", resolvedInputPath);
@@ -74,8 +72,8 @@ function splitWithFFmpeg(inputPath, duration) {
   });
 }
 
-async function splitAudioByDuration(inputPath, duration) {
-  const chunks = await splitWithFFmpeg(inputPath, duration);
+async function splitAudioByDuration(inputPath, duration, originalName) {
+  const chunks = await splitWithFFmpeg(inputPath, duration, originalName);
   console.log("🧩 Total chunks to upload:", chunks.length);
 
   const urls = [];

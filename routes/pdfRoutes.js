@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const fs = require("fs");
+const fs = require("fs").promises;
 const {
   splitPdfByPageCountAndUpload,
   mergePdfsFromUrls,
@@ -14,16 +14,18 @@ router.post("/split", upload.single("pdf"), async (req, res) => {
     const pagesPerChunk = parseInt(req.body.pages_per_chunk) || 10;
     const uploadedUrls = await splitPdfByPageCountAndUpload(
       req.file.path,
-      pagesPerChunk
+      pagesPerChunk,
+      req.file.originalname
     ); // every 5 pages per chunk
     res.json({ files: uploadedUrls });
   } catch (err) {
     console.error("PDF split & upload error:", err);
     res.status(500).json({ error: err.message });
   } finally {
-    // Delete uploaded original file
     try {
-      if (req.file?.path) await fs.unlink(req.file.path);
+      if (req.file?.path) {
+        await fs.unlink(req.file.path); // ✅ Promise-based unlink
+      }
     } catch (e) {
       console.warn("Failed to delete original PDF upload:", e);
     }

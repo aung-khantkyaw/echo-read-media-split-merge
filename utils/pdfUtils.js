@@ -10,14 +10,18 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-async function splitPdfByPageCountAndUpload(pdfPath, pagesPerChunk) {
+async function splitPdfByPageCountAndUpload(
+  pdfPath,
+  pagesPerChunk,
+  originalName
+) {
   const data = await fs.readFile(pdfPath);
   const pdfDoc = await PDFDocument.load(data);
   const totalPages = pdfDoc.getPageCount();
 
   const uploadedUrls = [];
 
-  const baseName = path.parse(pdfPath).name;
+  const baseName = path.parse(originalName).name;
 
   for (let startPage = 0; startPage < totalPages; startPage += pagesPerChunk) {
     const newPdf = await PDFDocument.create();
