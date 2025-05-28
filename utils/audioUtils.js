@@ -85,7 +85,7 @@ async function splitAudioByDuration(inputPath, duration) {
     try {
       const result = await cloudinary.uploader.upload(chunkPath, {
         resource_type: "video",
-        folder: "echo-read/book_audios",
+        folder: "echo_read/book_audios",
         public_id: path.basename(chunkPath, path.extname(chunkPath)),
         use_filename: true,
         overwrite: true,

@@ -38,7 +38,7 @@ async function splitPdfByPageCountAndUpload(pdfPath, pagesPerChunk) {
     try {
       const result = await cloudinary.uploader.upload(tempFilePath, {
         resource_type: "raw",
-        folder: "echo-read/ebooks",
+        folder: "echo_read/ebooks",
         public_id: path.parse(fileName).name,
         use_filename: true,
         overwrite: true,
