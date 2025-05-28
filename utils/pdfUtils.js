@@ -29,15 +29,20 @@ async function mergePdfs(paths) {
   const mergedPdf = await PDFDocument.create();
 
   for (const p of paths) {
-    const bytes = await fs.promises.readFile(p);
-    const doc = await PDFDocument.load(bytes);
-    const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
-    pages.forEach((p) => mergedPdf.addPage(p));
+    try {
+      const bytes = await fs.promises.readFile(p);
+      const doc = await PDFDocument.load(bytes);
+      const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+      pages.forEach((page) => mergedPdf.addPage(page));
+    } catch (err) {
+      console.error(`Error reading or merging file ${p}:`, err.message);
+      // skip this file and continue
+    }
   }
 
   const finalPdf = await mergedPdf.save();
   const mergedPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
-  fs.writeFileSync(mergedPath, finalPdf);
+  await fs.promises.writeFile(mergedPath, finalPdf);
   return mergedPath;
 }
 
