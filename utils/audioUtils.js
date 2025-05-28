@@ -85,13 +85,22 @@ async function splitAudioByDuration(inputPath, duration) {
     try {
       const result = await cloudinary.uploader.upload(chunkPath, {
         resource_type: "video",
-        folder: "book_audio",
+        folder: "echo-read/book_audio",
         public_id: path.basename(chunkPath, path.extname(chunkPath)),
         use_filename: true,
         overwrite: true,
       });
+
       console.log("✅ Uploaded:", result.secure_url);
-      urls.push(result.secure_url);
+
+      const match = result.secure_url.match(/\/book_audio\/.+$/);
+
+      if (match) {
+        const relativePath = match[0].substring(1);
+        urls.push(relativePath);
+      } else {
+        urls.push(result.secure_url);
+      }
     } catch (err) {
       console.error(`❌ Failed to upload ${chunkPath}:`, err.message);
       throw new Error(`Cloudinary upload failed for ${chunkPath}`);

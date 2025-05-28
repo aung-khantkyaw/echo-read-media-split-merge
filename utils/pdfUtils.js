@@ -1,13 +1,14 @@
 const fs = require("fs");
 const path = require("path");
-const { PDFDocument } = require("pdf-lib");
 const { v4: uuidv4 } = require("uuid");
+const { PDFDocument } = require("pdf-lib");
+const PDFMerger = require("pdf-merger-js");
+const fetch = require("node-fetch");
 
 async function splitPdfByPages(pdfPath) {
   const data = await fs.promises.readFile(pdfPath);
   const pdfDoc = await PDFDocument.load(data);
   const totalPages = pdfDoc.getPageCount();
-
   const outputFiles = [];
 
   for (let i = 0; i < totalPages; i++) {
@@ -18,7 +19,7 @@ async function splitPdfByPages(pdfPath) {
     const newPdfBytes = await newPdf.save();
     const fileName = `split_${uuidv4()}.pdf`;
     const filePath = path.join("uploads", fileName);
-    fs.writeFileSync(filePath, newPdfBytes);
+    await fs.promises.writeFile(filePath, newPdfBytes);
     outputFiles.push(filePath);
   }
 
@@ -26,26 +27,33 @@ async function splitPdfByPages(pdfPath) {
 }
 
 async function mergePdfsFromUrls(urls) {
-  const mergedPdf = await PDFDocument.create();
+  const merger = new PDFMerger();
+  merger._tempFiles = [];
 
   for (const url of urls) {
     try {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed to fetch: ${res.statusText}`);
-      const bytes = await res.arrayBuffer();
-      const doc = await PDFDocument.load(bytes);
-      const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
-      pages.forEach((page) => mergedPdf.addPage(page));
+      if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
+      const buffer = await res.buffer();
+
+      const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
+      await fs.promises.writeFile(tempPath, buffer);
+
+      await merger.add(tempPath);
+      merger._tempFiles.push(tempPath);
     } catch (err) {
-      console.error(`❌ Error reading or merging file ${url}:`, err.message);
-      // Skip file
+      console.error(`❌ Error processing ${url}:`, err.message);
     }
   }
 
-  const finalPdf = await mergedPdf.save();
-  const mergedPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
-  await fs.promises.writeFile(mergedPath, finalPdf);
-  return mergedPath;
+  const outputPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
+  await merger.save(outputPath);
+
+  for (const file of merger._tempFiles) {
+    fs.unlinkSync(file);
+  }
+
+  return outputPath;
 }
 
 module.exports = { splitPdfByPages, mergePdfsFromUrls };

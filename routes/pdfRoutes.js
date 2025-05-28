@@ -32,8 +32,8 @@ router.post("/merge", async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error in merge route:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Error merging PDFs:", err.message);
+    res.status(500).json({ error: "Failed to merge PDFs" });
   }
 });
 
