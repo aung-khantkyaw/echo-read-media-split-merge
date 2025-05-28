@@ -1,11 +1,7 @@
 services:
   - type: web
-    name: audio-api
-    env: node
-    buildCommand: |
-      apt-get update && apt-get install -y ffmpeg
-      npm install
-    startCommand: node index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
+    name: echo-read-api
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
