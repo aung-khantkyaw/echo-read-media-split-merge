@@ -1,8 +1,7 @@
-const fs = require("fs");
-const path = require("path");
-const { v4: uuidv4 } = require("uuid");
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
 const { PDFDocument } = require("pdf-lib");
-const fetch = require("node-fetch");
 
 async function splitPdfByPages(pdfPath) {
   const data = await fs.promises.readFile(pdfPath);
@@ -26,45 +25,50 @@ async function splitPdfByPages(pdfPath) {
 }
 
 async function mergePdfsFromUrls(urls) {
-  // dynamic import pdf-merger-js module (ESM)
+  // Dynamically import PDFMerger (ESM-only)
   const { default: PDFMerger } = await import("pdf-merger-js");
   const merger = new PDFMerger();
 
-  merger._tempFiles = [];
+  const tempFiles = [];
 
-  for (const url of urls) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
-
-      const buffer = await res.buffer();
-
-      const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
-      await fs.promises.writeFile(tempPath, buffer);
-
-      await merger.add(tempPath);
-
-      merger._tempFiles.push(tempPath);
-    } catch (err) {
-      console.error(`❌ Error processing ${url}:`, err.message);
-    }
-  }
-
-  const outputPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
-  await merger.save(outputPath);
-
-  // Clean up temp files
-  if (merger._tempFiles) {
-    for (const file of merger._tempFiles) {
+  try {
+    for (const url of urls) {
       try {
-        await fs.promises.unlink(file);
-      } catch (e) {
-        console.warn(`⚠️ Failed to delete temp file ${file}:`, e.message);
+        const res = await fetch(url);
+        if (!res.ok)
+          throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
+
+        // In Node.js 18+, Response.buffer() is not available; use arrayBuffer then Buffer.from
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
+        await fs.promises.writeFile(tempPath, buffer);
+
+        await merger.add(tempPath);
+
+        tempFiles.push(tempPath);
+      } catch (err) {
+        console.error(`❌ Error processing ${url}:`, err.message);
       }
     }
-  }
 
-  return outputPath;
+    const outputPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
+    await merger.save(outputPath);
+
+    return outputPath;
+  } finally {
+    // Cleanup temp files even if error happens
+    await Promise.all(
+      tempFiles.map(async (file) => {
+        try {
+          await fs.promises.unlink(file);
+        } catch (e) {
+          console.warn(`⚠️ Failed to delete temp file ${file}:`, e.message);
+        }
+      })
+    );
+  }
 }
 
 module.exports = { splitPdfByPages, mergePdfsFromUrls };
