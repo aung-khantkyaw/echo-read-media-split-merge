@@ -37,6 +37,8 @@ function splitWithFFmpeg(inputPath, duration) {
           duration.toString(),
           "-reset_timestamps",
           "1",
+          "-force_key_frames",
+          `expr:gte(t,n_forced*${duration})`,
         ])
         .audioCodec("libmp3lame")
         .output(outputPattern)
@@ -80,7 +82,7 @@ async function splitAudioByDuration(inputPath, duration) {
   for (const chunkPath of chunks) {
     try {
       const result = await cloudinary.uploader.upload(chunkPath, {
-        resource_type: "auto", // audio ကို auto မှတ်ပေးတာ
+        resource_type: "auto", // auto သုံးထားတာမှန်ပါတယ်
         folder: "book_audio",
       });
       urls.push(result.secure_url);
@@ -88,7 +90,7 @@ async function splitAudioByDuration(inputPath, duration) {
       console.error(`Failed to upload ${chunkPath}:`, err.message);
     } finally {
       try {
-        await fsPromises.unlink(chunkPath); // Delete chunk after upload
+        await fsPromises.unlink(chunkPath);
       } catch (e) {
         console.warn(`Failed to delete chunk ${chunkPath}:`, e.message);
       }

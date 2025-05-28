@@ -17,14 +17,17 @@ cloudinary.config({
 
 router.post("/split", upload.single("audio"), async (req, res) => {
   try {
-    const duration = parseInt(req.body.duration || "600", 10);
-    const chunks = await splitWithFFmpeg(req.file.path, duration);
+    const durationMinutes = parseInt(req.body.duration || "60", 10);
+    const durationSeconds = durationMinutes * 60; // seconds
+
+    const chunks = await splitAudioByDuration(req.file.path, durationSeconds);
     res.status(200).json({ files: chunks });
   } catch (error) {
     console.error("Error in /api/audio/split:", error);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 router.post("/merge", upload.array("audios"), async (req, res) => {
   try {
