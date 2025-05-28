@@ -35,9 +35,10 @@ function splitWithFFmpeg(inputPath, duration) {
           "segment",
           "-segment_time",
           duration.toString(),
-          "-c",
-          "copy",
+          "-reset_timestamps",
+          "1",
         ])
+        .audioCodec("libmp3lame")
         .output(outputPattern)
         .on("start", (cmdLine) => {
           console.log("FFmpeg command:", cmdLine);
@@ -79,14 +80,18 @@ async function splitAudioByDuration(inputPath, duration) {
   for (const chunkPath of chunks) {
     try {
       const result = await cloudinary.uploader.upload(chunkPath, {
-        resource_type: "video", // Treat audio as video in Cloudinary
+        resource_type: "auto", // audio ကို auto မှတ်ပေးတာ
         folder: "book_audio",
       });
       urls.push(result.secure_url);
     } catch (err) {
       console.error(`Failed to upload ${chunkPath}:`, err.message);
     } finally {
-      fs.unlinkSync(chunkPath); // Delete chunk after upload
+      try {
+        await fsPromises.unlink(chunkPath); // Delete chunk after upload
+      } catch (e) {
+        console.warn(`Failed to delete chunk ${chunkPath}:`, e.message);
+      }
     }
   }
 
@@ -97,8 +102,9 @@ async function splitAudioByDuration(inputPath, duration) {
 function mergeAudios(audioPaths) {
   return new Promise((resolve, reject) => {
     const uploadsDir = "uploads";
-    const output = path.join(uploadsDir, `merged_${uuidv4()}.mp3`);
-    const fileListPath = path.join(uploadsDir, `filelist_${uuidv4()}.txt`);
+    const uniqueId = uuidv4();
+    const output = path.join(uploadsDir, `merged_${uniqueId}.mp3`);
+    const fileListPath = path.join(uploadsDir, `filelist_${uniqueId}.txt`);
 
     const fileListContent = audioPaths
       .map((p) => `file '${path.resolve(p)}'`)
@@ -108,8 +114,8 @@ function mergeAudios(audioPaths) {
 
     ffmpeg()
       .input(fileListPath)
-      .inputOptions(["-f concat", "-safe 0"])
-      .outputOptions("-c copy")
+      .inputOptions(["-f", "concat", "-safe", "0"])
+      .outputOptions(["-c", "copy"])
       .output(output)
       .on("end", async () => {
         try {
@@ -119,7 +125,9 @@ function mergeAudios(audioPaths) {
         }
         resolve(output);
       })
-      .on("error", reject)
+      .on("error", (err) => {
+        reject(err);
+      })
       .run();
   });
 }
