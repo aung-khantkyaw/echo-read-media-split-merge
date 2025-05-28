@@ -91,7 +91,7 @@ async function splitAudioByDuration(inputPath, duration, originalName) {
 
       console.log("✅ Uploaded:", result.secure_url);
 
-      const match = result.secure_url.match(/\/book_audio\/.+$/);
+      const match = result.secure_url.match(/\/book_audios\/.+$/);
 
       if (match) {
         const relativePath = match[0].substring(1);
