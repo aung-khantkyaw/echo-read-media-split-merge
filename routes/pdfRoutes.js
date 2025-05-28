@@ -17,6 +17,7 @@ router.post("/split", upload.single("pdf"), async (req, res) => {
       pagesPerChunk,
       req.file.originalname
     ); // every 5 pages per chunk
+    console.log("✅ PDF split & upload completed:", uploadedUrls);
     res.json({ files: uploadedUrls });
   } catch (err) {
     console.error("PDF split & upload error:", err);
