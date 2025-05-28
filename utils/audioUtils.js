@@ -22,7 +22,7 @@ function splitWithFFmpeg(inputPath, duration) {
         resolvedInputPath,
         path.extname(resolvedInputPath)
       );
-      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
+      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`); // 👉 file name with original name
 
       console.log("Splitting audio using FFmpeg...");
       console.log("Input path:", resolvedInputPath);
