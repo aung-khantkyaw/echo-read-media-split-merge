@@ -110,10 +110,6 @@ async function splitPdfByPageCountAndUpload(
   return uploadedUrls;
 }
 
-const fs = require("fs/promises");
-const path = require("path");
-const { v4: uuidv4 } = require("uuid");
-
 async function mergePdfsFromUrls(urls) {
   const { default: PDFMerger } = await import("pdf-merger-js");
   const merger = new PDFMerger();
