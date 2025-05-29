@@ -4,12 +4,11 @@ const {
   mergeAudios,
 } = require("../utils/audioUtils");
 const { v2: cloudinary } = require("cloudinary");
-const fs = require("fs/promises"); // Use fs.promises for async operations
+const fs = require("fs/promises"); 
 const path = require("path");
 
 const router = express.Router();
 
-// Cloudinary configuration (keep as is, but ensure process.env variables are set)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -17,7 +16,6 @@ cloudinary.config({
 });
 
 module.exports = (upload) => {
-  // Accept 'upload' as an argument
   router.post("/split", upload.single("audio"), async (req, res) => {
     try {
       if (!req.file) {
@@ -33,7 +31,7 @@ module.exports = (upload) => {
       const chunks = await splitAudioByDurationAndUpload(
         req.file.path,
         durationSeconds,
-        req.file.filename // Pass the filename saved by Multer
+        req.file.filename
       );
       console.log("✅ Audio split complete. Chunks:", chunks);
       res.status(200).json({ files: chunks });
@@ -41,7 +39,6 @@ module.exports = (upload) => {
       console.error("❌ Error in /api/audio/split:", error);
       res.status(500).json({ error: error.message });
     } finally {
-      // Ensure the temporary uploaded file is deleted
       try {
         if (req.file?.path) {
           await fs.unlink(req.file.path);
@@ -63,10 +60,9 @@ module.exports = (upload) => {
           .status(400)
           .json({ error: "No audio files provided for merging." });
       }
-      const merged = await mergeAudios(req.files.map((f) => f.path)); // Assuming mergeAudios exists and returns a path
+      const merged = await mergeAudios(req.files.map((f) => f.path));
 
       res.download(merged, async (err) => {
-        // Ensure merged file is deleted after download
         if (err) {
           console.error("Error sending merged audio file:", err);
           res.status(500).send("Error sending merged audio file");

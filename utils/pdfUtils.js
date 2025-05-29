@@ -4,8 +4,6 @@ const { v4: uuidv4 } = require("uuid");
 const { PDFDocument } = require("pdf-lib");
 const { v2: cloudinary } = require("cloudinary");
 
-// --- IMPORTANT DEBUGGING: LOG THE ACTUAL VALUES ---
-// This is critical for confirming what Cloudinary SDK receives.
 console.log("--- Cloudinary Configuration Values (for debugging) ---");
 console.log("CLOUDINARY_CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME);
 console.log(
@@ -26,10 +24,9 @@ console.log(
         process.env.CLOUDINARY_API_SECRET.length - 4
       )}`
     : "NOT SET"
-); // Mask most of the secret
+); 
 console.log("--------------------------------------------------");
 
-// Cloudinary configuration
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -39,7 +36,7 @@ cloudinary.config({
 async function splitPdfByPageCountAndUpload(
   pdfPath,
   pagesPerChunk,
-  savedFilename // This is Multer's saved filename (e.g., "ခင်ခင်ထူး_မင်္ဂလာလှည်း_1748494512510-467277255.mp3")
+  savedFilename
 ) {
   const data = await fs.readFile(pdfPath);
   const pdfDoc = await PDFDocument.load(data);
@@ -47,8 +44,7 @@ async function splitPdfByPageCountAndUpload(
 
   const uploadedUrls = [];
 
-  // Use the savedFilename's base name for consistency
-  const baseName = path.parse(savedFilename).name; // e.g., "ခင်ခင်ထူး_မင်္ဂလာလှည်း_1748494512510-467277255"
+  const baseName = path.parse(savedFilename).name;
 
   for (let startPage = 0; startPage < totalPages; startPage += pagesPerChunk) {
     const newPdf = await PDFDocument.create();
@@ -62,53 +58,38 @@ async function splitPdfByPageCountAndUpload(
 
     const pdfBytes = await newPdf.save();
 
-    // Create a unique temporary filename for the chunk
-    // Ensure safe naming for temporary files, especially with unicode base names
     const chunkFileName = `split_${
       startPage + 1
     }_to_${endPage}_${baseName}_${uuidv4()}.pdf`;
 
-    // Path to save the temporary chunk. This should be in your uploads directory.
     const tempFilePath = path.join(path.dirname(pdfPath), chunkFileName);
     console.log(`📝 Saving temporary PDF chunk to: ${tempFilePath}`);
     await fs.writeFile(tempFilePath, pdfBytes);
 
     try {
-      // Use a more robust public_id that avoids potential issues with long or unicode paths
-      // For now, let's stick to an ASCII-only public_id for testing
       const publicIdForCloudinary = `ebooks/${baseName}_part_${
         startPage + 1
-      }_${uuidv4()}`;
-      // OR, if you just want a simple test public_id:
-      // const publicIdForCloudinary = `ebooks/split_pdf_chunk_${uuidv4()}`;
+      }_${uuidv4()}.pdf`;
 
       console.log(
         `📤 Uploading PDF chunk: ${tempFilePath} to Cloudinary with public_id: ${publicIdForCloudinary}`
       );
 
       const result = await cloudinary.uploader.upload(tempFilePath, {
-        resource_type: "raw", // PDF is typically 'raw'
+        resource_type: "raw",
         folder: "echo_read",
         public_id: publicIdForCloudinary,
-        // use_filename: true, // `public_id` overrides this, so it's less relevant when public_id is set
-        overwrite: true, // Overwrite if a public_id collision occurs
+        overwrite: true, 
       });
 
       console.log("✅ Uploaded:", result.secure_url);
 
-      // Extract relative path or push full URL
-      const match = result.secure_url.match(/\/ebooks\/.+$/);
-      if (match) {
-        uploadedUrls.push(match[0].substring(1)); // Store "ebooks/..."
-      } else {
-        uploadedUrls.push(result.secure_url); // Fallback to full URL
-      }
+      uploadedUrls.push(publicIdForCloudinary);
     } catch (err) {
       console.error(
         `❌ Failed to upload PDF chunk ${chunkFileName}:`,
         err.message
       );
-      // Log the full error object for more details
       console.error("Full Cloudinary Error Object:", err);
       throw new Error(
         `Cloudinary upload failed for ${chunkFileName}: ${err.message}`
@@ -129,9 +110,7 @@ async function splitPdfByPageCountAndUpload(
   return uploadedUrls;
 }
 
-// mergePdfsFromUrls function remains unchanged (it uses URLs, not filenames directly)
 async function mergePdfsFromUrls(urls) {
-  // Dynamically import PDFMerger (ESM-only)
   const { default: PDFMerger } = await import("pdf-merger-js");
   const merger = new PDFMerger();
 
@@ -147,8 +126,7 @@ async function mergePdfsFromUrls(urls) {
         const arrayBuffer = await res.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Ensure temp path is always in a safe, known location
-        const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`); // Changed from original
+        const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
         await fs.writeFile(tempPath, buffer);
 
         await merger.add(tempPath);
