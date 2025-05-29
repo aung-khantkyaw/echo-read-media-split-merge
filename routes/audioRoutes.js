@@ -1,46 +1,86 @@
 const express = require("express");
-const multer = require("multer");
-const { splitAudioByDuration } = require("../utils/audioUtils");
+const { splitAudioByDuration, mergeAudios } = require("../utils/audioUtils");
 const { v2: cloudinary } = require("cloudinary");
-const fs = require("fs/promises");
+const fs = require("fs/promises"); // Use fs.promises for async operations
 const path = require("path");
 
 const router = express.Router();
-const upload = multer({ dest: "uploads/" });
 
-// Cloudinary configuration
+// Cloudinary configuration (keep as is, but ensure process.env variables are set)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-router.post("/split", upload.single("audio"), async (req, res) => {
-  try {
-    console.log("🔧 Received file:", req.file?.path);
-    const durationMinutes = parseInt(req.body.duration || "60", 10);
-    const durationSeconds = durationMinutes * 60;
+module.exports = (upload) => {
+  // Accept 'upload' as an argument
+  router.post("/split", upload.single("audio"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No audio file uploaded." });
+      }
 
-    const chunks = await splitAudioByDuration(
-      req.file.path,
-      durationSeconds,
-      req.file.originalname
-    );
-    console.log("✅ Audio split complete. Chunks:", chunks);
-    res.status(200).json({ files: chunks });
-  } catch (error) {
-    console.error("❌ Error in /api/audio/split:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+      console.log("🔧 Received audio file:", req.file.path);
+      console.log("Saved Filename (correctly decoded):", req.file.filename);
 
-router.post("/merge", upload.array("audios"), async (req, res) => {
-  try {
-    const merged = await mergeAudios(req.files.map((f) => f.path));
-    res.download(merged);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+      const durationMinutes = parseInt(req.body.duration || "60", 10);
+      const durationSeconds = durationMinutes * 60;
 
-module.exports = router;
+      const chunks = await splitAudioByDuration(
+        req.file.path,
+        durationSeconds,
+        req.file.filename // Pass the filename saved by Multer
+      );
+      console.log("✅ Audio split complete. Chunks:", chunks);
+      res.status(200).json({ files: chunks });
+    } catch (error) {
+      console.error("❌ Error in /api/audio/split:", error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      // Ensure the temporary uploaded file is deleted
+      try {
+        if (req.file?.path) {
+          await fs.unlink(req.file.path);
+          console.log(`Deleted temporary file: ${req.file.path}`);
+        }
+      } catch (e) {
+        console.warn(
+          `Failed to delete original audio upload at ${req.file?.path}:`,
+          e
+        );
+      }
+    }
+  });
+
+  router.post("/merge", upload.array("audios"), async (req, res) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "No audio files provided for merging." });
+      }
+      const merged = await mergeAudios(req.files.map((f) => f.path)); // Assuming mergeAudios exists and returns a path
+
+      res.download(merged, async (err) => {
+        // Ensure merged file is deleted after download
+        if (err) {
+          console.error("Error sending merged audio file:", err);
+          res.status(500).send("Error sending merged audio file");
+        } else {
+          try {
+            await fs.unlink(merged);
+            console.log(`Deleted merged audio file: ${merged}`);
+          } catch (e) {
+            console.warn(`Failed to delete merged audio at ${merged}:`, e);
+          }
+        }
+      });
+    } catch (err) {
+      console.error("Error merging audios:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  return router;
+};

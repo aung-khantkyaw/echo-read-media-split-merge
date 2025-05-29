@@ -13,16 +13,19 @@ cloudinary.config({
 });
 
 // Function to split audio file into chunks using FFmpeg
-function splitWithFFmpeg(inputPath, duration, originalName) {
+function splitWithFFmpeg(inputPath, duration, savedFilename) {
+  // Change parameter name
   return new Promise((resolve, reject) => {
     try {
       const resolvedInputPath = path.resolve(inputPath);
-      const outputDir = path.dirname(resolvedInputPath);
+      const outputDir = path.dirname(resolvedInputPath); // Use the directory where the input file is
 
+      // Use the savedFilename for generating baseName for chunks
       const baseName = path
-        .basename(originalName, path.extname(originalName))
-        .normalize("NFC");
-      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
+        .basename(savedFilename, path.extname(savedFilename))
+        .normalize("NFC"); // NFC normalization is good practice for Unicode filenames
+
+      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`); // Changed output pattern to use outputDir
 
       console.log("Splitting audio using FFmpeg...");
       console.log("Input path:", resolvedInputPath);
@@ -55,10 +58,11 @@ function splitWithFFmpeg(inputPath, duration, originalName) {
         })
         .on("end", async () => {
           try {
+            // Read files from the same outputDir where chunks were saved
             const files = await fsPromises.readdir(outputDir);
             const chunkPaths = files
               .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
-              .map((f) => path.join(outputDir, f));
+              .map((f) => path.join(outputDir, f)); // Ensure full path
             console.log("Split complete. Files:", chunkPaths);
             resolve(chunkPaths);
           } catch (err) {
@@ -74,8 +78,9 @@ function splitWithFFmpeg(inputPath, duration, originalName) {
   });
 }
 
-async function splitAudioByDuration(inputPath, duration, originalName) {
-  const chunks = await splitWithFFmpeg(inputPath, duration, originalName);
+async function splitAudioByDuration(inputPath, duration, savedFilename) {
+  // Change parameter name
+  const chunks = await splitWithFFmpeg(inputPath, duration, savedFilename); // Pass savedFilename
   console.log("🧩 Total chunks to upload:", chunks.length);
 
   const urls = [];
@@ -84,9 +89,14 @@ async function splitAudioByDuration(inputPath, duration, originalName) {
     console.log("📤 Uploading chunk:", chunkPath);
     try {
       const result = await cloudinary.uploader.upload(chunkPath, {
-        resource_type: "video",
+        resource_type: "video", // or 'raw' for audio files not treated as video
         folder: "echo_read/book_audios",
-        public_id: path.basename(chunkPath, path.extname(chunkPath)),
+        // public_id: path.basename(chunkPath, path.extname(chunkPath)), // This is usually fine if baseName is good
+        // Use a more robust public_id if needed, e.g., combining savedFilename base with uuid
+        public_id: `${path.parse(savedFilename).name}_${uuidv4()}_${path
+          .basename(chunkPath, path.extname(chunkPath))
+          .split("_")
+          .pop()}`,
         use_filename: true,
         overwrite: true,
       });
@@ -117,10 +127,12 @@ async function splitAudioByDuration(inputPath, duration, originalName) {
   return urls;
 }
 
-// Merge audio files using ffmpeg and return output path
+// mergeAudios function remains largely unchanged, but ensure it handles paths correctly
 function mergeAudios(audioPaths) {
   return new Promise((resolve, reject) => {
-    const uploadsDir = "uploads";
+    // Dynamically determine the uploads directory from one of the input paths if possible
+    // Or stick to a hardcoded 'uploads' if files are always there
+    const uploadsDir = path.dirname(audioPaths[0] || "uploads"); // Assumes all audioPaths are in the same dir
     const uniqueId = uuidv4();
     const output = path.join(uploadsDir, `merged_${uniqueId}.mp3`);
     const fileListPath = path.join(uploadsDir, `filelist_${uniqueId}.txt`);

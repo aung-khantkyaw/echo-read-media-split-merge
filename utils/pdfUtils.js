@@ -13,7 +13,7 @@ cloudinary.config({
 async function splitPdfByPageCountAndUpload(
   pdfPath,
   pagesPerChunk,
-  originalName
+  savedFilename // Change parameter name to reflect Multer's saved filename
 ) {
   const data = await fs.readFile(pdfPath);
   const pdfDoc = await PDFDocument.load(data);
@@ -21,7 +21,8 @@ async function splitPdfByPageCountAndUpload(
 
   const uploadedUrls = [];
 
-  const baseName = path.parse(originalName).name;
+  // Use the savedFilename, which is already correctly decoded by Multer
+  const baseName = path.parse(savedFilename).name;
 
   for (let startPage = 0; startPage < totalPages; startPage += pagesPerChunk) {
     const newPdf = await PDFDocument.create();
@@ -35,16 +36,23 @@ async function splitPdfByPageCountAndUpload(
 
     const pdfBytes = await newPdf.save();
 
-    const fileName = `split_${startPage + 1}_to_${endPage}_${baseName}.pdf`;
-    const tempFilePath = path.join("uploads", fileName);
+    // Ensure output filename is unique and uses the correctly decoded baseName
+    const uniqueId = uuidv4(); // Add a UUID for better uniqueness
+    const fileName = `split_${
+      startPage + 1
+    }_to_${endPage}_${baseName}_${uniqueId}.pdf`;
+
+    // Path to save the temporary chunk. This should ideally be within the designated upload directory or a temp dir.
+    // Ensure 'uploads' directory is configured in Multer destination logic.
+    const tempFilePath = path.join(path.dirname(pdfPath), fileName); // Save temp chunk in the same directory as the original uploaded file
     await fs.writeFile(tempFilePath, pdfBytes);
 
     try {
       const result = await cloudinary.uploader.upload(tempFilePath, {
         resource_type: "raw",
         folder: "echo_read/ebooks",
-        public_id: path.parse(fileName).name,
-        use_filename: true,
+        public_id: path.parse(fileName).name, // Use the generated unique filename as public_id
+        use_filename: true, // Use Multer's filename as a basis for Cloudinary's filename
         overwrite: true,
       });
 
@@ -73,6 +81,7 @@ async function splitPdfByPageCountAndUpload(
   return uploadedUrls;
 }
 
+// mergePdfsFromUrls function remains unchanged (it uses URLs, not filenames directly)
 async function mergePdfsFromUrls(urls) {
   // Dynamically import PDFMerger (ESM-only)
   const { default: PDFMerger } = await import("pdf-merger-js");
@@ -87,12 +96,12 @@ async function mergePdfsFromUrls(urls) {
         if (!res.ok)
           throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
 
-        // In Node.js 18+, Response.buffer() is not available; use arrayBuffer then Buffer.from
         const arrayBuffer = await res.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
-        await fs.promises.writeFile(tempPath, buffer);
+        // Ensure temp path is always in a safe, known location
+        const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`); // Changed from original
+        await fs.writeFile(tempPath, buffer);
 
         await merger.add(tempPath);
 
@@ -107,11 +116,10 @@ async function mergePdfsFromUrls(urls) {
 
     return outputPath;
   } finally {
-    // Cleanup temp files even if error happens
     await Promise.all(
       tempFiles.map(async (file) => {
         try {
-          await fs.promises.unlink(file);
+          await fs.unlink(file);
         } catch (e) {
           console.warn(`⚠️ Failed to delete temp file ${file}:`, e.message);
         }
