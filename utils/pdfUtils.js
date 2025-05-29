@@ -24,7 +24,7 @@ console.log(
         process.env.CLOUDINARY_API_SECRET.length - 4
       )}`
     : "NOT SET"
-); 
+);
 console.log("--------------------------------------------------");
 
 cloudinary.config({
@@ -79,7 +79,7 @@ async function splitPdfByPageCountAndUpload(
         resource_type: "raw",
         folder: "echo_read",
         public_id: publicIdForCloudinary,
-        overwrite: true, 
+        overwrite: true,
       });
 
       console.log("✅ Uploaded:", result.secure_url);
@@ -110,11 +110,23 @@ async function splitPdfByPageCountAndUpload(
   return uploadedUrls;
 }
 
+const fs = require("fs/promises");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+
 async function mergePdfsFromUrls(urls) {
   const { default: PDFMerger } = await import("pdf-merger-js");
   const merger = new PDFMerger();
 
   const tempFiles = [];
+
+  const uploadsDir = path.join("uploads");
+  try {
+    await fs.mkdir(uploadsDir, { recursive: true });
+  } catch (err) {
+    console.error("❌ Failed to create uploads directory:", err.message);
+    throw err;
+  }
 
   try {
     for (const url of urls) {
@@ -126,18 +138,17 @@ async function mergePdfsFromUrls(urls) {
         const arrayBuffer = await res.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        const tempPath = path.join("uploads", `temp_${uuidv4()}.pdf`);
+        const tempPath = path.join(uploadsDir, `temp_${uuidv4()}.pdf`);
         await fs.writeFile(tempPath, buffer);
 
         await merger.add(tempPath);
-
         tempFiles.push(tempPath);
       } catch (err) {
         console.error(`❌ Error processing ${url}:`, err.message);
       }
     }
 
-    const outputPath = path.join("uploads", `merged_${uuidv4()}.pdf`);
+    const outputPath = path.join(uploadsDir, `merged_${uuidv4()}.pdf`);
     await merger.save(outputPath);
 
     return outputPath;
