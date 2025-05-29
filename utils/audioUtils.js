@@ -5,6 +5,31 @@ const ffmpeg = require("fluent-ffmpeg");
 const { v4: uuidv4 } = require("uuid");
 const { v2: cloudinary } = require("cloudinary");
 
+// --- IMPORTANT DEBUGGING: LOG THE ACTUAL VALUES (masked for security) ---
+// This is crucial for confirming what Cloudinary SDK receives.
+console.log("--- Cloudinary Configuration Values (for debugging) ---");
+console.log("CLOUDINARY_CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME);
+console.log(
+  "CLOUDINARY_API_KEY:",
+  process.env.CLOUDINARY_API_KEY
+    ? `${process.env.CLOUDINARY_API_KEY.substring(
+        0,
+        4
+      )}...${process.env.CLOUDINARY_API_KEY.substring(
+        process.env.CLOUDINARY_API_KEY.length - 4
+      )}`
+    : "NOT SET"
+);
+console.log(
+  "CLOUDINARY_API_SECRET:",
+  process.env.CLOUDINARY_API_SECRET
+    ? `************${process.env.CLOUDINARY_API_SECRET.substring(
+        process.env.CLOUDINARY_API_SECRET.length - 4
+      )}`
+    : "NOT SET"
+); // Mask most of the secret
+console.log("--------------------------------------------------");
+
 // Cloudinary configuration
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -14,18 +39,18 @@ cloudinary.config({
 
 // Function to split audio file into chunks using FFmpeg
 function splitWithFFmpeg(inputPath, duration, savedFilename) {
-  // Change parameter name
   return new Promise((resolve, reject) => {
     try {
       const resolvedInputPath = path.resolve(inputPath);
-      const outputDir = path.dirname(resolvedInputPath); // Use the directory where the input file is
+      const outputDir = path.dirname(resolvedInputPath);
 
       // Use the savedFilename for generating baseName for chunks
+      // Normalizing ensures consistent Unicode representation
       const baseName = path
         .basename(savedFilename, path.extname(savedFilename))
-        .normalize("NFC"); // NFC normalization is good practice for Unicode filenames
+        .normalize("NFC");
 
-      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`); // Changed output pattern to use outputDir
+      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
 
       console.log("Splitting audio using FFmpeg...");
       console.log("Input path:", resolvedInputPath);
@@ -58,11 +83,10 @@ function splitWithFFmpeg(inputPath, duration, savedFilename) {
         })
         .on("end", async () => {
           try {
-            // Read files from the same outputDir where chunks were saved
             const files = await fsPromises.readdir(outputDir);
             const chunkPaths = files
               .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
-              .map((f) => path.join(outputDir, f)); // Ensure full path
+              .map((f) => path.join(outputDir, f));
             console.log("Split complete. Files:", chunkPaths);
             resolve(chunkPaths);
           } catch (err) {
@@ -79,8 +103,7 @@ function splitWithFFmpeg(inputPath, duration, savedFilename) {
 }
 
 async function splitAudioByDuration(inputPath, duration, savedFilename) {
-  // Change parameter name
-  const chunks = await splitWithFFmpeg(inputPath, duration, savedFilename); // Pass savedFilename
+  const chunks = await splitWithFFmpeg(inputPath, duration, savedFilename);
   console.log("🧩 Total chunks to upload:", chunks.length);
 
   const urls = [];
@@ -88,23 +111,31 @@ async function splitAudioByDuration(inputPath, duration, savedFilename) {
   for (const chunkPath of chunks) {
     console.log("📤 Uploading chunk:", chunkPath);
     try {
+      // Use a simplified, ASCII-only public_id for testing to rule out Unicode issues
+      const baseNameWithoutExt = path.parse(savedFilename).name;
+      const chunkNumber = path
+        .basename(chunkPath, path.extname(chunkPath))
+        .split("_")
+        .pop();
+      const publicIdForCloudinary = `book_audios/${baseNameWithoutExt}_chunk_${chunkNumber}_${uuidv4()}`;
+
+      console.log(
+        `Cloudinary public_id for this chunk: ${publicIdForCloudinary}`
+      );
+
       const result = await cloudinary.uploader.upload(chunkPath, {
-        resource_type: "video", // or 'raw' for audio files not treated as video
+        resource_type: "raw", // Changed from "auto" to "raw" for specific audio files
         folder: "echo_read/book_audios",
-        // public_id: path.basename(chunkPath, path.extname(chunkPath)), // This is usually fine if baseName is good
-        // Use a more robust public_id if needed, e.g., combining savedFilename base with uuid
-        public_id: `${path.parse(savedFilename).name}_${uuidv4()}_${path
-          .basename(chunkPath, path.extname(chunkPath))
-          .split("_")
-          .pop()}`,
-        use_filename: true,
+        // public_id: `<span class="math-inline">\{path\.parse\(savedFilename\)\.name\}\_</span>{uuidv4()}_${path.basename(chunkPath, path.extname(chunkPath)).split("_").pop()}`,
+        // Change to a simpler public_id for testing:
+        public_id: `audio_chunk_${uuidv4()}_${path.basename(chunkPath, path.extname(chunkPath)).split("_").pop()}`,
+        use_filename: false, // `public_id` will be used, so no need for original filename
         overwrite: true,
       });
 
       console.log("✅ Uploaded:", result.secure_url);
 
       const match = result.secure_url.match(/\/book_audios\/.+$/);
-
       if (match) {
         const relativePath = match[0].substring(1);
         urls.push(relativePath);
@@ -113,7 +144,11 @@ async function splitAudioByDuration(inputPath, duration, savedFilename) {
       }
     } catch (err) {
       console.error(`❌ Failed to upload ${chunkPath}:`, err.message);
-      throw new Error(`Cloudinary upload failed for ${chunkPath}`);
+      // Log the full error object for more detailed insights from Cloudinary
+      console.error("Full Cloudinary Error Object:", err);
+      throw new Error(
+        `Cloudinary upload failed for ${chunkPath}: ${err.message}`
+      );
     } finally {
       try {
         await fsPromises.unlink(chunkPath);
@@ -127,12 +162,10 @@ async function splitAudioByDuration(inputPath, duration, savedFilename) {
   return urls;
 }
 
-// mergeAudios function remains largely unchanged, but ensure it handles paths correctly
+// --- mergeAudios function remains largely unchanged ---
 function mergeAudios(audioPaths) {
   return new Promise((resolve, reject) => {
-    // Dynamically determine the uploads directory from one of the input paths if possible
-    // Or stick to a hardcoded 'uploads' if files are always there
-    const uploadsDir = path.dirname(audioPaths[0] || "uploads"); // Assumes all audioPaths are in the same dir
+    const uploadsDir = path.dirname(audioPaths[0] || "uploads");
     const uniqueId = uuidv4();
     const output = path.join(uploadsDir, `merged_${uniqueId}.mp3`);
     const fileListPath = path.join(uploadsDir, `filelist_${uniqueId}.txt`);
@@ -150,7 +183,7 @@ function mergeAudios(audioPaths) {
       .output(output)
       .on("end", async () => {
         try {
-          await fsPromises.unlink(fileListPath); // Clean up temp txt
+          await fsPromises.unlink(fileListPath);
         } catch (e) {
           console.warn("Could not delete temp file list:", e.message);
         }
