@@ -37,129 +37,112 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Function to split audio file into chunks using FFmpeg
-function splitWithFFmpeg(inputPath, duration, savedFilename) {
-  return new Promise((resolve, reject) => {
-    try {
-      const resolvedInputPath = path.resolve(inputPath);
-      const outputDir = path.dirname(resolvedInputPath);
+async function splitAudioByDurationAndUpload(
+  inputPath,
+  duration,
+  savedFilename
+) {
+  const resolvedInputPath = path.resolve(inputPath);
 
-      // Use the savedFilename for generating baseName for chunks
-      // Normalizing ensures consistent Unicode representation
-      const baseName = path
-        .basename(savedFilename, path.extname(savedFilename))
-        .normalize("NFC");
+  // const baseName = path.parse(savedFilename).name.normalize("NFC");
+  // const outputDir = path.dirname(resolvedInputPath);
+  // const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
 
-      const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
+  const rawBaseName = path.parse(savedFilename).name.normalize("NFC");
+  const safeBaseName = rawBaseName.replace(/[^\w\-]/g, ""); // Remove Myanmar/Unicode
+  const outputDir = path.dirname(resolvedInputPath);
+  const outputPattern = path.join(outputDir, `${safeBaseName}_%03d.mp3`);
 
-      console.log("Splitting audio using FFmpeg...");
-      console.log("Input path:", resolvedInputPath);
-      console.log("Output pattern:", outputPattern);
-      console.log("Segment duration (sec):", duration);
+  console.log("🎧 Splitting audio using FFmpeg...");
+  console.log("📥 Input path:", resolvedInputPath);
+  console.log("🧩 Output pattern:", outputPattern);
+  console.log("⏱️ Segment duration:", duration, "seconds");
 
-      ffmpeg(resolvedInputPath)
-        .outputOptions([
-          "-f",
-          "segment",
-          "-segment_time",
-          duration.toString(),
-          "-reset_timestamps",
-          "1",
-          "-force_key_frames",
-          `expr:gte(t,n_forced*${duration})`,
-        ])
-        .audioCodec("libmp3lame")
-        .output(outputPattern)
-        .on("start", (cmdLine) => {
-          console.log("FFmpeg command:", cmdLine);
-        })
-        .on("stderr", (stderrLine) => {
-          console.error("FFmpeg STDERR:", stderrLine);
-        })
-        .on("error", (err, stdout, stderr) => {
-          console.error("FFmpeg ERROR:", err.message);
-          console.error("FFmpeg STDERR:", stderr);
-          reject(new Error(`FFmpeg failed: ${err.message}`));
-        })
-        .on("end", async () => {
-          try {
-            const files = await fsPromises.readdir(outputDir);
-            const chunkPaths = files
-              .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
-              .map((f) => path.join(outputDir, f));
-            console.log("Split complete. Files:", chunkPaths);
-            resolve(chunkPaths);
-          } catch (err) {
-            console.error("Failed to read output directory:", err);
-            reject(err);
-          }
-        })
-        .run();
-    } catch (err) {
-      console.error("Unexpected error in splitWithFFmpeg:", err);
-      reject(err);
-    }
+  const uploadedUrls = [];
+
+  await new Promise((resolve, reject) => {
+    ffmpeg(resolvedInputPath)
+      .outputOptions([
+        "-f",
+        "segment",
+        "-segment_time",
+        duration.toString(),
+        "-reset_timestamps",
+        "1",
+        "-force_key_frames",
+        `expr:gte(t,n_forced*${duration})`,
+      ])
+      .audioCodec("libmp3lame")
+      .output(outputPattern)
+      .on("start", (cmdLine) => {
+        console.log("🔧 FFmpeg command:", cmdLine);
+      })
+      .on("stderr", (stderrLine) => {
+        console.error("⚙️ FFmpeg STDERR:", stderrLine);
+      })
+      .on("error", (err, stdout, stderr) => {
+        console.error("❌ FFmpeg ERROR:", err.message);
+        console.error("FFmpeg STDERR:", stderr);
+        reject(new Error(`FFmpeg failed: ${err.message}`));
+      })
+      .on("end", resolve)
+      .run();
   });
-}
 
-async function splitAudioByDuration(inputPath, duration, savedFilename) {
-  const chunks = await splitWithFFmpeg(inputPath, duration, savedFilename);
-  console.log("🧩 Total chunks to upload:", chunks.length);
+  // Read all chunk files generated
+  const files = await fsPromises.readdir(outputDir);
+  const chunks = files
+    .filter((f) => f.startsWith(safeBaseName + "_") && f.endsWith(".mp3"))
+    .map((f) => path.join(outputDir, f));
 
-  const urls = [];
+  console.log("🧩 Audio split complete. Chunks found:", chunks.length);
 
   for (const chunkPath of chunks) {
-    console.log("📤 Uploading chunk:", chunkPath);
+    const chunkNumber = path.basename(chunkPath, ".mp3").split("_").pop();
+    // const publicId = `book_audios/${baseName}_chunk_${chunkNumber}_${uuidv4()}.mp3`;
+
+    const rawBaseName = path.parse(savedFilename).name.normalize("NFC");
+    const safeBaseName = rawBaseName.replace(/[^\w\-]/g, "");
+
+    const publicId = `book_audios/${safeBaseName}_chunk_${chunkNumber}_${uuidv4()}`;
+
+    const stats = await fsPromises.stat(chunkPath);
+    const fileSizeInBytes = stats.size;
+    const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
+
+    console.log(`📦 Chunk size: ${fileSizeInMB} MB`);
+    console.log(`📤 Uploading chunk: ${chunkPath}`);
+    console.log(`➡️ Cloudinary public_id: ${publicId}`);
+
     try {
-      // Use a simplified, ASCII-only public_id for testing to rule out Unicode issues
-      const baseNameWithoutExt = path.parse(savedFilename).name;
-      const chunkNumber = path
-        .basename(chunkPath, path.extname(chunkPath))
-        .split("_")
-        .pop();
-      const publicIdForCloudinary = `book_audios/${baseNameWithoutExt}_chunk_${chunkNumber}_${uuidv4()}`;
-
-      console.log(
-        `Cloudinary public_id for this chunk: ${publicIdForCloudinary}`
-      );
-
       const result = await cloudinary.uploader.upload(chunkPath, {
-        resource_type: "raw", // Changed from "auto" to "raw" for specific audio files
-        folder: "echo_read/book_audios",
-        // public_id: `<span class="math-inline">\{path\.parse\(savedFilename\)\.name\}\_</span>{uuidv4()}_${path.basename(chunkPath, path.extname(chunkPath)).split("_").pop()}`,
-        // Change to a simpler public_id for testing:
-        public_id: `audio_chunk_${uuidv4()}_${path.basename(chunkPath, path.extname(chunkPath)).split("_").pop()}`,
-        use_filename: false, // `public_id` will be used, so no need for original filename
+        resource_type: "video", // For audio files
+        folder: "echo_read",
+        public_id: publicId,
         overwrite: true,
       });
 
       console.log("✅ Uploaded:", result.secure_url);
 
       const match = result.secure_url.match(/\/book_audios\/.+$/);
-      if (match) {
-        const relativePath = match[0].substring(1);
-        urls.push(relativePath);
-      } else {
-        urls.push(result.secure_url);
-      }
+      uploadedUrls.push(match ? match[0].substring(1) : result.secure_url);
     } catch (err) {
-      console.error(`❌ Failed to upload ${chunkPath}:`, err.message);
-      // Log the full error object for more detailed insights from Cloudinary
-      console.error("Full Cloudinary Error Object:", err);
+      console.error(`❌ Upload failed for ${chunkPath}:`, err.message);
+      console.error("Full error:", err);
       throw new Error(
         `Cloudinary upload failed for ${chunkPath}: ${err.message}`
       );
     } finally {
       try {
         await fsPromises.unlink(chunkPath);
-        console.log("🗑️ Deleted temp file:", chunkPath);
+        console.log("🗑️ Deleted temp chunk:", chunkPath);
       } catch (e) {
-        console.warn(`⚠️ Failed to delete chunk ${chunkPath}:`, e.message);
+        console.warn(`⚠️ Failed to delete temp chunk ${chunkPath}:`, e.message);
       }
     }
   }
 
-  return urls;
+  return uploadedUrls;
 }
 
 // --- mergeAudios function remains largely unchanged ---
@@ -197,7 +180,131 @@ function mergeAudios(audioPaths) {
 }
 
 module.exports = {
-  splitWithFFmpeg,
-  splitAudioByDuration,
+  splitAudioByDurationAndUpload,
   mergeAudios,
 };
+
+// // Function to split audio file into chunks using FFmpeg
+// function splitWithFFmpeg(inputPath, duration, savedFilename) {
+//   return new Promise((resolve, reject) => {
+//     try {
+//       const resolvedInputPath = path.resolve(inputPath);
+//       const outputDir = path.dirname(resolvedInputPath);
+
+//       // Use the savedFilename for generating baseName for chunks
+//       // Normalizing ensures consistent Unicode representation
+//       const baseName = path
+//         .basename(savedFilename, path.extname(savedFilename))
+//         .normalize("NFC");
+
+//       const outputPattern = path.join(outputDir, `${baseName}_%03d.mp3`);
+
+//       console.log("Splitting audio using FFmpeg...");
+//       console.log("Input path:", resolvedInputPath);
+//       console.log("Output pattern:", outputPattern);
+//       console.log("Segment duration (sec):", duration);
+
+//       ffmpeg(resolvedInputPath)
+//         .outputOptions([
+//           "-f",
+//           "segment",
+//           "-segment_time",
+//           duration.toString(),
+//           "-reset_timestamps",
+//           "1",
+//           "-force_key_frames",
+//           `expr:gte(t,n_forced*${duration})`,
+//         ])
+//         .audioCodec("libmp3lame")
+//         .output(outputPattern)
+//         .on("start", (cmdLine) => {
+//           console.log("FFmpeg command:", cmdLine);
+//         })
+//         .on("stderr", (stderrLine) => {
+//           console.error("FFmpeg STDERR:", stderrLine);
+//         })
+//         .on("error", (err, stdout, stderr) => {
+//           console.error("FFmpeg ERROR:", err.message);
+//           console.error("FFmpeg STDERR:", stderr);
+//           reject(new Error(`FFmpeg failed: ${err.message}`));
+//         })
+//         .on("end", async () => {
+//           try {
+//             const files = await fsPromises.readdir(outputDir);
+//             const chunkPaths = files
+//               .filter((f) => f.startsWith(baseName + "_") && f.endsWith(".mp3"))
+//               .map((f) => path.join(outputDir, f));
+//             console.log("Split complete. Files:", chunkPaths);
+//             resolve(chunkPaths);
+//           } catch (err) {
+//             console.error("Failed to read output directory:", err);
+//             reject(err);
+//           }
+//         })
+//         .run();
+//     } catch (err) {
+//       console.error("Unexpected error in splitWithFFmpeg:", err);
+//       reject(err);
+//     }
+//   });
+// }
+
+// async function splitAudioByDuration(inputPath, duration, savedFilename) {
+//   const chunks = await splitWithFFmpeg(inputPath, duration, savedFilename);
+//   console.log("🧩 Total chunks to upload:", chunks.length);
+
+//   const urls = [];
+
+//   for (const chunkPath of chunks) {
+//     console.log("📤 Uploading chunk:", chunkPath);
+//     try {
+//       // Use a simplified, ASCII-only public_id for testing to rule out Unicode issues
+//       const baseNameWithoutExt = path.parse(savedFilename).name;
+//       const chunkNumber = path
+//         .basename(chunkPath, path.extname(chunkPath))
+//         .split("_")
+//         .pop();
+//       const publicIdForCloudinary = `book_audios/${baseNameWithoutExt}_chunk_${chunkNumber}_${uuidv4()}`;
+
+//       console.log(
+//         `Cloudinary public_id for this chunk: ${publicIdForCloudinary}`
+//       );
+
+//       const result = await cloudinary.uploader.upload(chunkPath, {
+//         resource_type: "raw", // Changed from "auto" to "raw" for specific audio files
+//         folder: "echo_read/book_audios",
+//         // public_id: `<span class="math-inline">\{path\.parse\(savedFilename\)\.name\}\_</span>{uuidv4()}_${path.basename(chunkPath, path.extname(chunkPath)).split("_").pop()}`,
+//         // Change to a simpler public_id for testing:
+//         public_id: `audio_chunk_${uuidv4()}_${path.basename(chunkPath, path.extname(chunkPath)).split("_").pop()}`,
+//         use_filename: false, // `public_id` will be used, so no need for original filename
+//         overwrite: true,
+//       });
+
+//       console.log("✅ Uploaded:", result.secure_url);
+
+//       const match = result.secure_url.match(/\/book_audios\/.+$/);
+//       if (match) {
+//         const relativePath = match[0].substring(1);
+//         urls.push(relativePath);
+//       } else {
+//         urls.push(result.secure_url);
+//       }
+//     } catch (err) {
+//       console.error(`❌ Failed to upload ${chunkPath}:`, err.message);
+//       // Log the full error object for more detailed insights from Cloudinary
+//       console.error("Full Cloudinary Error Object:", err);
+//       throw new Error(
+//         `Cloudinary upload failed for ${chunkPath}: ${err.message}`
+//       );
+//     } finally {
+//       try {
+//         await fsPromises.unlink(chunkPath);
+//         console.log("🗑️ Deleted temp file:", chunkPath);
+//       } catch (e) {
+//         console.warn(`⚠️ Failed to delete chunk ${chunkPath}:`, e.message);
+//       }
+//     }
+//   }
+
+//   return urls;
+// }

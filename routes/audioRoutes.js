@@ -1,5 +1,8 @@
 const express = require("express");
-const { splitAudioByDuration, mergeAudios } = require("../utils/audioUtils");
+const {
+  splitAudioByDurationAndUpload,
+  mergeAudios,
+} = require("../utils/audioUtils");
 const { v2: cloudinary } = require("cloudinary");
 const fs = require("fs/promises"); // Use fs.promises for async operations
 const path = require("path");
@@ -27,7 +30,7 @@ module.exports = (upload) => {
       const durationMinutes = parseInt(req.body.duration || "60", 10);
       const durationSeconds = durationMinutes * 60;
 
-      const chunks = await splitAudioByDuration(
+      const chunks = await splitAudioByDurationAndUpload(
         req.file.path,
         durationSeconds,
         req.file.filename // Pass the filename saved by Multer
