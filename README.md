@@ -27,17 +27,27 @@ This Node.js-based REST API provides robust functionalities for handling PDF and
 * **Render**: Cloud platform for deploying web applications.
 
 ## 📁 Directory Structure
+
+```
 .
-├── index.js
+├── node_modules/
 ├── routes/
-│   ├── pdfRoutes.js       --> Routes for PDF operations
-│   └── audioRoutes.js     --> Routes for Audio operations
+│   ├── audioRoutes.js
+│   └── pdfRoutes.js
 ├── utils/
-│   ├── pdfUtils.js        --> PDF processing logic (split, merge)
-│   └── audioUtils.js      --> Audio processing logic (split, merge)
-└── uploads/
-├── pdfs/              --> Temporary storage for PDF files
-└── audios/            --> Temporary storage for audio files
+│   ├── audioUtils.js
+│   └── pdfUtils.js
+├── .dockerignore
+├── .env
+├── .gitignore
+├── compose.yaml
+├── Dockerfile
+├── index.js
+├── package-lock.json
+├── package.json
+├── README.Docker.md
+└── render.yaml
+```
 
 ## ⚙️ Installation
 
@@ -46,7 +56,7 @@ To get this API up and running on your local machine, follow these steps:
 1.  **Clone the repository:**
 
     ```bash
-    git clone [https://github.com/aung-khantkyaw/large-file-split-and-upload-to-cloudinary](https://github.com/aung-khantkyaw/large-file-split-and-upload-to-cloudinary)
+    git clone https://github.com/aung-khantkyaw/large-file-split-and-upload-to-cloudinary
     cd large-file-split-and-upload-to-cloudinary
 
     ```
